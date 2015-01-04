@@ -1,37 +1,34 @@
-package main
+package whistler
 
 import (
-	"fmt"
-	"math"
-	"time"
-
 	"code.google.com/p/portaudio-go/portaudio"
 	"github.com/mjibson/go-dsp/fft"
 )
 
-func main() {
+func Initialize() {
 	portaudio.Initialize()
-	defer portaudio.Terminate()
+}
 
-	w, err := NewWhistler()
-	chk(err)
-	defer w.Close()
+func Terminate() {
+	portaudio.Terminate()
+}
 
-	chk(w.Start())
-	time.Sleep(5 * time.Second)
+type handler struct {
+	matcher   *Matcher
+	matchChan chan bool
 }
 
 type Whistler struct {
-	*portaudio.Stream
+	stream *portaudio.Stream
 
-	SampleRate float64
-	Buffer     []float64
-	Index      int
+	sampleRate float64
+	buffer     []float64
+	index      int
 
-	Matcher *Matcher
+	handlers []handler
 }
 
-func NewWhistler() (*Whistler, error) {
+func New() (*Whistler, error) {
 	h, err := portaudio.DefaultHostApi()
 	if err != nil {
 		return nil, err
@@ -41,68 +38,66 @@ func NewWhistler() (*Whistler, error) {
 	p.Output.Device = nil
 
 	whistler := new(Whistler)
-	whistler.SampleRate = p.SampleRate
-	whistler.Buffer = make([]float64, 4000)
-	whistler.Matcher = NewMatcher()
+	whistler.sampleRate = p.SampleRate
+	whistler.buffer = make([]float64, 4000)
 
-	whistler.Stream, err = portaudio.OpenStream(p, whistler.ProcessAudio)
+	whistler.stream, err = portaudio.OpenStream(p, whistler.processAudio)
 	return whistler, err
 }
 
-func (w *Whistler) ProcessAudio(in []float32) {
+func (w *Whistler) Add(whistle MatchFactory) chan bool {
+	matchChan := make(chan bool)
+	matcher := whistle.New()
+	w.handlers = append(w.handlers, handler{
+		matcher:   matcher,
+		matchChan: matchChan,
+	})
+	return matchChan
+}
+
+func (w *Whistler) Listen() error {
+	return w.stream.Start()
+}
+
+func (w *Whistler) Close() error {
+	return w.stream.Close()
+}
+
+func (w *Whistler) processAudio(in []float32) {
 	for i := range in {
-		w.Buffer[w.Index] = float64(in[i])
-		w.Index = (w.Index + 1) % len(w.Buffer)
-		if w.Index == 0 {
-			waves := w.CalculateFFT()
-			isMatch := w.Matcher.Match(waves)
-			if isMatch {
-				fmt.Println("MATCH!!!")
-			} else {
-				fmt.Println("No match...")
-			}
+		w.buffer[w.index] = float64(in[i])
+		w.index = (w.index + 1) % len(w.buffer)
+		if w.index == 0 {
+			w.checkMatches()
 		}
 	}
 }
 
-func (w *Whistler) CalculateFFT() []SineWave {
-	ys := fft.FFTReal(w.Buffer)
+func (w *Whistler) checkMatches() {
+	waves := w.calculateFFT()
+	for _, handler := range w.handlers {
+		if handler.matcher.Match(waves) {
+			handler.matchChan <- true
+		}
+	}
+}
+
+func (w *Whistler) calculateFFT() []SineWave {
+	ys := fft.FFTReal(w.buffer)
 	ys = ys[:len(ys)/2]
 
 	waves := make([]SineWave, len(ys))
 	for index, y := range ys {
-		waves[index] = interpretIndividualFFT(y, index, len(w.Buffer), w.SampleRate)
+		waves[index] = interpretIndividualFFT(y, index, len(w.buffer), w.sampleRate)
 	}
 
 	WaveSet(waves).Sort()
 	filteredWaves := make([]SineWave, 0)
 	for _, wave := range waves {
 		if wave.Amplitude > 1.0e-3 {
-			// fmt.Println(wave.String())
 			filteredWaves = append(filteredWaves, wave)
 		}
 	}
 
 	return filteredWaves
-}
-
-func interpretIndividualFFT(x complex128, index, n int, samplingRate float64) SineWave {
-	r := real(x)
-	i := imag(x)
-
-	freq := float64(index) * samplingRate / float64(n)
-	amp := math.Sqrt((r*r)+(i*i)) * 2 / float64(n)
-	phase := math.Atan(i/r) + math.Pi/2
-
-	return SineWave{
-		Amplitude:   amp,
-		Frequency:   freq,
-		PhaseOffset: phase,
-	}
-}
-
-func chk(err error) {
-	if err != nil {
-		panic(err)
-	}
 }

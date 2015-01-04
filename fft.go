@@ -1,4 +1,4 @@
-package main
+package whistler
 
 import (
 	"fmt"
@@ -19,6 +19,21 @@ func (w SineWave) String() string {
 
 func (w SineWave) Value(t float64) float64 {
 	return w.Amplitude * math.Sin(t*2*math.Pi*w.Frequency+w.PhaseOffset)
+}
+
+func interpretIndividualFFT(x complex128, index, n int, samplingRate float64) SineWave {
+	r := real(x)
+	i := imag(x)
+
+	freq := float64(index) * samplingRate / float64(n)
+	amp := math.Sqrt((r*r)+(i*i)) * 2 / float64(n)
+	phase := math.Atan(i/r) + math.Pi/2
+
+	return SineWave{
+		Amplitude:   amp,
+		Frequency:   freq,
+		PhaseOffset: phase,
+	}
 }
 
 // WaveSet is a series of SineWaves.
