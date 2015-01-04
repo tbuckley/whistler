@@ -77,8 +77,8 @@ func (w *Whistler) CalculateFFT() []SineWave {
 	WaveSet(waves).Sort()
 	filteredWaves := make([]SineWave, 0)
 	for _, wave := range waves {
-		if wave.Amplitude > 1.0e-4 {
-			fmt.Println(wave.String())
+		if wave.Amplitude > 1.0e-3 {
+			// fmt.Println(wave.String())
 			filteredWaves = append(filteredWaves, wave)
 		}
 	}
