@@ -96,6 +96,7 @@ func (w *Whistler) calculateFFT() []SineWave {
 	waves = filterToFrequencyRange(waves, 700, 1800)
 	WaveSet(waves).Sort()
 	if len(waves) > 2 {
+		log.Printf("Slimming down waves from %d to %d", len(waves), 2)
 		waves = waves[:2]
 	}
 

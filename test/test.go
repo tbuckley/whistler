@@ -149,7 +149,7 @@ func runRecordings() {
 	if fails > 0 {
 		fmt.Printf("[FAIL] %d / %d passed\n", passes, fails+passes)
 	} else {
-		fmt.Printf("[FAIL] %d / %d passed\n", passes, fails+passes)
+		fmt.Printf("[PASS] %d / %d passed\n", passes, fails+passes)
 	}
 }
 

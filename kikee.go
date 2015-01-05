@@ -48,27 +48,39 @@ var (
 //   Nothing -> MATCH
 
 type StartState int
-type InitState int
-type QuietState struct {
-	N int
-}
-type PeakState struct {
-	N    int
+type SustainState struct {
 	Freq float64
+}
+type RisingState struct {
+	N          int
+	Freq       float64
+	TargetFreq float64
+}
+type QuietState struct {
+	Freq float64
+	N    int
+}
+type FallingState struct {
+	N          int
+	Freq       float64
+	TargetFreq float64
 }
 type SuccessState int
 
 func (s *StartState) Name() string {
 	return "START"
 }
-func (s *InitState) Name() string {
-	return "INIT"
+func (s *SustainState) Name() string {
+	return fmt.Sprintf("SUSTAIN(%0.2f)", s.Freq)
+}
+func (s *RisingState) Name() string {
+	return fmt.Sprintf("RISING(%d, %0.2f, %0.2f)", s.N, s.Freq, s.TargetFreq)
 }
 func (s *QuietState) Name() string {
-	return fmt.Sprintf("QUIET(%d)", s.N)
+	return fmt.Sprintf("QUIET(%d, %0.2f)", s.N, s.Freq)
 }
-func (s *PeakState) Name() string {
-	return fmt.Sprintf("PEAK(%d, %0.2f)", s.N, s.Freq)
+func (s *FallingState) Name() string {
+	return fmt.Sprintf("FALLING(%d, %0.2f, %0.2f)", s.N, s.Freq, s.TargetFreq)
 }
 func (s *SuccessState) Name() string {
 	return "SUCCESS"
@@ -76,22 +88,32 @@ func (s *SuccessState) Name() string {
 
 func (s *StartState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyInRange(100, 1300, waves):
-		return new(InitState)
+	case hasFrequencyInRange(900, 1300, waves):
+		return &SustainState{strongestFrequencyInRange(900, 1300, waves)}
 	default:
 		return nil
 	}
 }
 
-func (s *InitState) Handle(waves []SineWave) State {
+func (s *SustainState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyAbove(1350, waves):
-		return &PeakState{N: 0, Freq: highestFrequency(waves)}
-	case hasFrequencyInRange(1000, 1300, waves):
-		// fmt.Printf("%v: %v", len(waves), hasFrequencyInRange(950, 1150, waves))
-		return new(InitState)
+	case hasFrequencyAbove(s.Freq+25, waves):
+		return &RisingState{N: 0, Freq: strongestFrequencyAbove(s.Freq+25, waves), TargetFreq: s.Freq + 200}
+	case hasFrequencyInRange(s.Freq-25, s.Freq+25, waves):
+		return &SustainState{s.Freq}
 	case len(waves) == 0:
-		return &QuietState{N: 0}
+		return &QuietState{N: 0, Freq: s.Freq}
+	default:
+		return nil
+	}
+}
+
+func (s *RisingState) Handle(waves []SineWave) State {
+	switch {
+	case hasFrequencyAbove(s.Freq, waves):
+		return &RisingState{N: s.N + 1, Freq: strongestFrequencyAbove(s.Freq, waves), TargetFreq: s.TargetFreq}
+	case hasFrequencyBelow(s.Freq, waves) && s.Freq > s.TargetFreq:
+		return &FallingState{N: 0, Freq: strongestFrequencyBelow(s.Freq, waves), TargetFreq: s.Freq - 500}
 	default:
 		return nil
 	}
@@ -99,21 +121,23 @@ func (s *InitState) Handle(waves []SineWave) State {
 
 func (s *QuietState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyAbove(1350, waves):
-		return &PeakState{N: 0, Freq: highestFrequency(waves)}
-	case len(waves) == 0 && s.N < 2:
-		return &QuietState{N: s.N + 1}
+	case hasFrequencyAbove(s.Freq+25, waves):
+		return &RisingState{N: 0, Freq: strongestFrequencyAbove(s.Freq+25, waves), TargetFreq: s.Freq + 200}
+	case len(waves) == 0 && s.N < 1:
+		return &QuietState{N: s.N + 1, Freq: s.Freq}
 	default:
 		return nil
 	}
 }
 
-func (s *PeakState) Handle(waves []SineWave) State {
+func (s *FallingState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyBelow(1100, waves) && s.N > 2:
+	case hasFrequencyBelow(s.TargetFreq, waves) && s.N >= 1:
 		return new(SuccessState)
-	case hasFrequencyBelow(s.Freq, waves):
-		return &PeakState{N: s.N + 1, Freq: highestFrequencyBelow(s.Freq, waves)}
+	case hasFrequencyInRange(s.Freq-400, s.Freq-25, waves):
+		return &FallingState{N: s.N + 1, Freq: strongestFrequencyBelow(s.Freq, waves), TargetFreq: s.TargetFreq}
+	case hasFrequencyInRange(s.Freq-25, s.Freq, waves):
+		return &FallingState{N: s.N, Freq: strongestFrequencyBelow(s.Freq, waves), TargetFreq: s.TargetFreq}
 	default:
 		return nil
 	}
