@@ -3,6 +3,7 @@ package whistler
 import (
 	"code.google.com/p/portaudio-go/portaudio"
 	"github.com/mjibson/go-dsp/fft"
+	"log"
 )
 
 func Initialize() {
@@ -91,13 +92,19 @@ func (w *Whistler) calculateFFT() []SineWave {
 		waves[index] = interpretIndividualFFT(y, index, len(w.buffer), w.sampleRate)
 	}
 
+	waves = filterLowAmplitudes(waves, 0.005)
+	waves = filterToFrequencyRange(waves, 700, 1800)
 	WaveSet(waves).Sort()
-	filteredWaves := make([]SineWave, 0)
-	for _, wave := range waves {
-		if wave.Amplitude > 1.0e-3 {
-			filteredWaves = append(filteredWaves, wave)
+	if len(waves) > 2 {
+		waves = waves[:2]
+	}
+
+	if len(waves) > 0 {
+		log.Printf("[WAVE] =======================")
+		for _, wave := range waves {
+			log.Printf("[WAVE] %s", wave.String())
 		}
 	}
 
-	return filteredWaves
+	return waves
 }

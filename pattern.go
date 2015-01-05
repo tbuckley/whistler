@@ -10,9 +10,9 @@ type State interface {
 }
 
 type Matcher struct {
-	states []State
-	start  State
-	match  State
+	states     []State
+	StartState State
+	MatchState State
 }
 
 type MatchFactory interface {
@@ -34,7 +34,7 @@ func (m *Matcher) Match(point []SineWave) bool {
 	for _, state := range m.states {
 		if out := state.Handle(point); out != nil {
 			transitions = append(transitions, stateTransition{state, out})
-			if out == m.match {
+			if out == m.MatchState {
 				match = true
 			} else {
 				states = append(states, out)
@@ -43,8 +43,8 @@ func (m *Matcher) Match(point []SineWave) bool {
 	}
 
 	// Always apply the START state
-	if out := m.start.Handle(point); out != nil {
-		transitions = append(transitions, stateTransition{m.start, out})
+	if out := m.StartState.Handle(point); out != nil {
+		transitions = append(transitions, stateTransition{m.StartState, out})
 		states = append(states, out)
 	}
 
@@ -55,7 +55,12 @@ func (m *Matcher) Match(point []SineWave) bool {
 		}
 	}
 
-	m.states = states
+	// Remove other state machines if there's a match
+	if match {
+		m.states = nil
+	} else {
+		m.states = states
+	}
 
 	return match
 }

@@ -14,8 +14,8 @@ type kikeeFactory struct {
 
 func (f *kikeeFactory) New() *Matcher {
 	return &Matcher{
-		start: f.start,
-		match: &MATCH,
+		StartState: f.start,
+		MatchState: &MATCH,
 	}
 }
 
@@ -40,8 +40,8 @@ var (
 //   Nothing && N < 5 -> QUIET(N+1)
 //   Nothing && N == 5 -> FAIL
 // PEAK(Freq, N)
-//   <Freq && N < 4 -> PEAK(Freq, N+1)
-//   <Freq && N == 4 -> SUCCESS
+//   <1100 && N < 2 -> SUCCESS
+//   <Freq -> PEAK(Freq, N+1)
 //   >Freq -> FAIL
 // SUCCESS
 //   Anything -> SUCCESS
@@ -76,7 +76,7 @@ func (s *SuccessState) Name() string {
 
 func (s *StartState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyInRange(950, 1150, waves):
+	case hasFrequencyInRange(100, 1300, waves):
 		return new(InitState)
 	default:
 		return nil
@@ -85,13 +85,13 @@ func (s *StartState) Handle(waves []SineWave) State {
 
 func (s *InitState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyInRange(950, 1150, waves):
+	case hasFrequencyAbove(1350, waves):
+		return &PeakState{N: 0, Freq: highestFrequency(waves)}
+	case hasFrequencyInRange(1000, 1300, waves):
 		// fmt.Printf("%v: %v", len(waves), hasFrequencyInRange(950, 1150, waves))
 		return new(InitState)
 	case len(waves) == 0:
 		return &QuietState{N: 0}
-	case hasFrequencyAbove(1300, waves):
-		return &PeakState{N: 0, Freq: highestFrequency(waves)}
 	default:
 		return nil
 	}
@@ -99,9 +99,9 @@ func (s *InitState) Handle(waves []SineWave) State {
 
 func (s *QuietState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyAbove(1300, waves):
+	case hasFrequencyAbove(1350, waves):
 		return &PeakState{N: 0, Freq: highestFrequency(waves)}
-	case len(waves) == 0 && s.N < 5:
+	case len(waves) == 0 && s.N < 2:
 		return &QuietState{N: s.N + 1}
 	default:
 		return nil
@@ -110,10 +110,10 @@ func (s *QuietState) Handle(waves []SineWave) State {
 
 func (s *PeakState) Handle(waves []SineWave) State {
 	switch {
-	case hasFrequencyBelow(s.Freq, waves) && s.N == 3:
+	case hasFrequencyBelow(1100, waves) && s.N > 2:
 		return new(SuccessState)
 	case hasFrequencyBelow(s.Freq, waves):
-		return &PeakState{N: s.N + 1, Freq: highestFrequency(waves)}
+		return &PeakState{N: s.N + 1, Freq: highestFrequencyBelow(s.Freq, waves)}
 	default:
 		return nil
 	}

@@ -1,7 +1,13 @@
 package whistler
 
 func filter(waves []SineWave, pred func(SineWave) bool) []SineWave {
-	return nil
+	filteredWaves := make([]SineWave, 0)
+	for _, wave := range waves {
+		if pred(wave) {
+			filteredWaves = append(filteredWaves, wave)
+		}
+	}
+	return filteredWaves
 }
 
 func filterLowAmplitudes(waves []SineWave, min float64) []SineWave {
@@ -48,4 +54,7 @@ func highestFrequency(waves []SineWave) float64 {
 		}
 	}
 	return max
+}
+func highestFrequencyBelow(freq float64, waves []SineWave) float64 {
+	return highestFrequency(filterToFrequencyRange(waves, 0, freq))
 }
